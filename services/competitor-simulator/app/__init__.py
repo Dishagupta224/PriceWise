@@ -1,0 +1,1 @@
+"""Competitor simulator package."""

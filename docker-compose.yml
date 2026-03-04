@@ -1,0 +1,243 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: smart-pricing-postgres
+    environment:
+      POSTGRES_DB: smart_pricing
+      POSTGRES_USER: smart_pricing
+      POSTGRES_PASSWORD: smart_pricing
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smart_pricing -d smart_pricing"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smart-pricing-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: smart-pricing-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - smart-pricing-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: smart-pricing-kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    networks:
+      - smart-pricing-network
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: smart-pricing-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./scripts/create-kafka-topics.sh:/create-kafka-topics.sh
+    entrypoint: ["/bin/sh", "/create-kafka-topics.sh"]
+    restart: "no"
+    networks:
+      - smart-pricing-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: smart-pricing-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_CLUSTERS_0_NAME: smart-pricing-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    ports:
+      - "8080:8080"
+    networks:
+      - smart-pricing-network
+
+  dashboard-api:
+    build:
+      context: ./services/dashboard-api
+    container_name: smart-pricing-dashboard-api
+    env_file:
+      - ./services/dashboard-api/.env.example
+    environment:
+      DATABASE_URL: postgresql+asyncpg://smart_pricing:smart_pricing@postgres:5432/smart_pricing
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/dashboard-api:/app
+      - ./services/shared:/app/shared
+    command: ["/app/start.sh"]
+    networks:
+      - smart-pricing-network
+
+  competitor-simulator:
+    build:
+      context: .
+      dockerfile: ./services/competitor-simulator/Dockerfile
+    container_name: smart-pricing-competitor-simulator
+    environment:
+      DATABASE_URL: postgresql+asyncpg://smart_pricing:smart_pricing@postgres:5432/smart_pricing
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SIMULATION_MIN_INTERVAL_SECONDS: 10
+      SIMULATION_MAX_INTERVAL_SECONDS: 30
+      SIMULATION_SPEED: 1.0
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/competitor-simulator/app:/app/app
+      - ./services/competitor-simulator/start.sh:/app/start.sh
+      - ./services/shared:/app/shared
+    command: ["/bin/sh", "/app/start.sh"]
+    networks:
+      - smart-pricing-network
+
+  demand-simulator:
+    build:
+      context: .
+      dockerfile: ./services/demand-simulator/Dockerfile
+    container_name: smart-pricing-demand-simulator
+    environment:
+      DATABASE_URL: postgresql+asyncpg://smart_pricing:smart_pricing@postgres:5432/smart_pricing
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SIMULATION_MIN_INTERVAL_SECONDS: 10
+      SIMULATION_MAX_INTERVAL_SECONDS: 30
+      SIMULATION_SPEED: 1.0
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/demand-simulator/app:/app/app
+      - ./services/demand-simulator/start.sh:/app/start.sh
+      - ./services/shared:/app/shared
+    command: ["/bin/sh", "/app/start.sh"]
+    networks:
+      - smart-pricing-network
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: ./services/inventory-service/Dockerfile
+    container_name: smart-pricing-inventory-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://smart_pricing:smart_pricing@postgres:5432/smart_pricing
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INVENTORY_CONSUMER_GROUP: inventory-service
+      LOW_STOCK_THRESHOLD: 15
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/inventory-service/app:/app/app
+      - ./services/inventory-service/start.sh:/app/start.sh
+      - ./services/shared:/app/shared
+    command: ["/bin/sh", "/app/start.sh"]
+    networks:
+      - smart-pricing-network
+
+  pricing-agent:
+    build:
+      context: .
+      dockerfile: ./services/pricing-agent/Dockerfile
+    container_name: smart-pricing-pricing-agent
+    environment:
+      DATABASE_URL: postgresql+asyncpg://smart_pricing:smart_pricing@postgres:5432/smart_pricing
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      LOG_LEVEL: INFO
+      LOW_STOCK_THRESHOLD: 15
+      MIN_SIGNIFICANT_PRICE_CHANGE_PERCENT: 2
+      PRICING_COOLDOWN_MINUTES: 10
+      MAX_CONCURRENT_DECISIONS: 3
+      PROCESSING_QUEUE_SIZE: 100
+      METRICS_LOG_INTERVAL_SECONDS: 60
+      HEALTHCHECK_FILE: /tmp/pricing-agent.healthy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os,time,sys; path=os.environ.get('HEALTHCHECK_FILE','/tmp/pricing-agent.healthy'); sys.exit(0 if os.path.exists(path) and time.time()-os.path.getmtime(path) < 30 else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    volumes:
+      - ./services/pricing-agent/app:/app/app
+      - ./services/pricing-agent/start.sh:/app/start.sh
+      - ./services/shared:/app/shared
+    command: ["/bin/sh", "/app/start.sh"]
+    networks:
+      - smart-pricing-network
+
+volumes:
+  postgres_data:
+
+networks:
+  smart-pricing-network:
+    driver: bridge

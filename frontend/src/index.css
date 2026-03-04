@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply min-h-screen bg-ink bg-dashboard-grid bg-[size:28px_28px] text-slate-100 antialiased;
+  background-color: #081018;
+}
+
+#root {
+  @apply min-h-screen;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b1520;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #294154;
+  border-radius: 999px;
+}
+
+.panel {
+  @apply rounded-2xl border border-line/80 bg-panel/90 shadow-panel backdrop-blur;
+}
+
+.panel-soft {
+  @apply rounded-2xl border border-line/60 bg-panelSoft/75;
+}
+
+.label {
+  @apply text-xs font-medium uppercase tracking-[0.22em] text-muted;
+}
+
+.value {
+  @apply text-2xl font-semibold text-slate-50;
+}
+
+.status-pill {
+  @apply inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium;
+}
+
+.table-shell {
+  @apply overflow-hidden rounded-2xl border border-line/70 bg-panel/[0.85];
+}
+
+.table-shell table {
+  @apply min-w-full divide-y divide-line/70;
+}
+
+.table-shell thead {
+  @apply bg-slate-950/30;
+}
+
+.table-shell th {
+  @apply px-4 py-3 text-left text-xs uppercase tracking-[0.22em] text-muted;
+}
+
+.table-shell td {
+  @apply px-4 py-4 text-sm text-slate-200;
+}
+
+.table-shell tbody tr {
+  @apply border-b border-line/40 transition hover:bg-white/5;
+}
+
+.table-shell tbody tr:last-child {
+  @apply border-b-0;
+}
+
+.input-shell {
+  @apply rounded-xl border border-line/80 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-accent;
+}
+
+.metric-bar {
+  @apply h-2 overflow-hidden rounded-full bg-slate-900/70;
+}
+
+.metric-bar > span {
+  @apply block h-full rounded-full;
+}
+
+@keyframes feed-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.feed-event-enter {
+  animation: feed-slide-in 240ms ease-out;
+}
