@@ -1,5 +1,6 @@
 import { AlertTriangle, Boxes, Percent, ReceiptText } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import LiveEventFeed from "../components/LiveEventFeed";
 import LoadingPanel from "../components/LoadingPanel";
 import SummaryCard from "../components/SummaryCard";
@@ -9,6 +10,7 @@ import { getAnalyticsSummary, getTopMovers } from "../services/api";
 import { formatCurrency, formatNumber, formatPercent } from "../utils/formatters";
 
 function DashboardPage() {
+  const navigate = useNavigate();
   const { messages } = useLiveFeed();
   const [summary, setSummary] = useState(null);
   const [movers, setMovers] = useState([]);
@@ -91,30 +93,34 @@ function DashboardPage() {
         <SummaryCard
           label="Total Active Products"
           value={formatNumber(summary?.total_active_products)}
-          hint="Active catalog items monitored by the agent"
+          hint="Active catalog items monitored by the agent. Click to open products."
           tone="accent"
           icon={Boxes}
+          onClick={() => navigate("/products")}
         />
         <SummaryCard
           label="Decisions Made Today"
           value={formatNumber(summary?.total_decisions_today)}
-          hint="Agent decisions executed in the current UTC day"
+          hint="Agent decisions executed in the current UTC day. Click to open decisions."
           tone="success"
           icon={ReceiptText}
+          onClick={() => navigate("/decisions?dateRange=today")}
         />
         <SummaryCard
           label="Average Margin"
           value={formatPercent(summary?.avg_margin_percent)}
-          hint={`Net price impact ${formatCurrency(summary?.total_revenue_impact)}`}
+          hint={`Net price impact ${formatCurrency(summary?.total_revenue_impact)}. Click for detailed margin insights.`}
           tone={marginTone}
           icon={Percent}
+          onClick={() => navigate("/insights/margin")}
         />
         <SummaryCard
           label="Active Alerts"
           value={formatNumber(alertCount)}
-          hint={`${formatNumber(summary?.overpriced_products)} overpriced products still need attention`}
+          hint={`${formatNumber(summary?.overpriced_products)} overpriced products still need attention. Click to open the Alerts page.`}
           tone={alertCount > 0 ? "danger" : "success"}
           icon={AlertTriangle}
+          onClick={() => navigate("/alerts")}
         />
       </section>
 

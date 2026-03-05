@@ -1,0 +1,19 @@
+services:
+  tests:
+    image: python:3.12-slim
+    container_name: smart-pricing-tests
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    command:
+      - /bin/sh
+      - -lc
+      - >
+        pip install --no-cache-dir
+        -r services/pricing-agent/requirements.txt
+        -r services/dashboard-api/requirements.txt
+        -r requirements-test.txt &&
+        cd services/pricing-agent &&
+        pytest -q &&
+        cd ../dashboard-api &&
+        pytest -q

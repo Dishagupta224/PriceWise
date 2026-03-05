@@ -62,8 +62,10 @@ class RuleEngine:
             return cooldown_result
 
         if product.stock_quantity <= 0:
+            request_id = str(event.get("request_id") or event.get("event_id") or uuid4())
             payload = {
                 "event_id": str(uuid4()),
+                "request_id": request_id,
                 "product_id": product.id,
                 "alert_type": "REORDER_ALERT",
                 "current_stock": product.stock_quantity,

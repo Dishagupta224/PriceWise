@@ -1,4 +1,4 @@
-function SummaryCard({ label, value, hint, tone = "accent", icon: Icon }) {
+function SummaryCard({ label, value, hint, tone = "accent", icon: Icon, onClick }) {
   const toneClasses = {
     accent: "from-accent/20 to-accent/5 text-accent",
     success: "from-success/20 to-success/5 text-success",
@@ -7,7 +7,12 @@ function SummaryCard({ label, value, hint, tone = "accent", icon: Icon }) {
   };
 
   return (
-    <div className="panel relative overflow-hidden p-5">
+    <button
+      type="button"
+      className={`panel relative w-full overflow-hidden p-5 text-left ${onClick ? "transition hover:border-line hover:bg-white/[0.02]" : ""}`}
+      onClick={onClick}
+      disabled={!onClick}
+    >
       <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${toneClasses[tone]}`} />
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -21,7 +26,7 @@ function SummaryCard({ label, value, hint, tone = "accent", icon: Icon }) {
           </div>
         ) : null}
       </div>
-    </div>
+    </button>
   );
 }
 

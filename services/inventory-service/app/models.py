@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -32,4 +32,4 @@ class OrderEvent(Base):
     product_id: Mapped[int] = mapped_column(nullable=False, index=True)
     quantity: Mapped[int] = mapped_column(nullable=False)
     customer_region: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)

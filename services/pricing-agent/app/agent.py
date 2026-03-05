@@ -74,7 +74,7 @@ class AgentExecutionResult:
     source_event_id: str | None = None
     audit_reasoning: str | None = None
 
-    def to_kafka_payload(self, product_id: int) -> dict[str, Any]:
+    def to_kafka_payload(self, product_id: int, *, request_id: str | None = None) -> dict[str, Any]:
         """Convert the decision result into the event published to Kafka."""
         payload: dict[str, Any] = {
             "event_id": str(uuid4()),
@@ -87,6 +87,8 @@ class AgentExecutionResult:
             "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "source_event_id": self.source_event_id,
         }
+        if request_id:
+            payload["request_id"] = request_id
         if self.proposed_price is not None:
             payload["proposed_price"] = float(self.proposed_price)
         if self.update_result is not None:
@@ -104,6 +106,7 @@ class PricingDecisionAgent:
         """Process one event end to end and return the final decision payload."""
         product_id = int(event["product_id"])
         source_event_id = str(event.get("event_id")) if event.get("event_id") else None
+        request_id = str(event.get("request_id") or source_event_id or uuid4())
 
         if self._client is None:
             result = self._fallback_hold(
@@ -362,6 +365,7 @@ class PricingDecisionAgent:
         if decision_type is AgentDecisionType.REORDER_ALERT:
             alert_payload = {
                 "event_id": str(uuid4()),
+                "request_id": request_id,
                 "product_id": product_id,
                 "alert_type": "REORDER_ALERT",
                 "reason": str(decision.get("alert_message") or reasoning),

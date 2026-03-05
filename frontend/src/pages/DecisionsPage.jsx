@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import EmptyState from "../components/EmptyState";
 import LoadingPanel from "../components/LoadingPanel";
 import StatusBadge from "../components/StatusBadge";
@@ -80,6 +81,9 @@ function initials(name) {
 }
 
 function DecisionsPage() {
+  const [searchParams] = useSearchParams();
+  const dateRangeParam = searchParams.get("dateRange");
+  const initialDateRange = ["today", "last7", "last30"].includes(dateRangeParam || "") ? dateRangeParam : "last7";
   const [response, setResponse] = useState(null);
   const [details, setDetails] = useState({});
   const [expanded, setExpanded] = useState({});
@@ -88,7 +92,7 @@ function DecisionsPage() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
     decisionTypes: DECISION_TYPES,
-    dateRange: "last7",
+    dateRange: initialDateRange,
     productSearch: "",
     selectedProductId: "",
     minConfidence: 0,

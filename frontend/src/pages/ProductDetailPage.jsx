@@ -117,9 +117,15 @@ function ProductDetailPage() {
 
         <div className="panel min-w-[20rem] p-5">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="label">Current Price</p>
-              <p className="mt-2 text-4xl font-semibold text-slate-50">{formatCurrency(product.our_price)}</p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="label">Current Price</p>
+                <p className="mt-2 text-4xl font-semibold text-slate-50">{formatCurrency(product.our_price)}</p>
+              </div>
+              <div>
+                <p className="label">Cost Price</p>
+                <p className="mt-3 text-2xl font-semibold text-slate-200">{formatCurrency(product.cost_price)}</p>
+              </div>
             </div>
             <StatusBadge value={isConnected ? "EXECUTED" : "PENDING"} />
           </div>

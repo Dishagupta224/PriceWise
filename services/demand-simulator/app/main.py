@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from contextlib import suppress
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
@@ -15,13 +16,11 @@ from app.config import get_settings
 from app.database import AsyncSessionLocal
 from app.models import Product
 from shared.kafka_utils import AsyncKafkaProducer
+from shared.observability import clear_request_id, configure_logging, ensure_request_id, touch_healthcheck
 
 settings = get_settings()
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s [demand-simulator] %(message)s",
-)
+configure_logging("demand-simulator", settings.log_level)
 logger = logging.getLogger(__name__)
 
 REGIONS = ("Mumbai", "Delhi", "Bengaluru", "Hyderabad", "Pune", "Chennai", "Kolkata")
@@ -36,64 +35,76 @@ class DemandSimulator:
     def __init__(self) -> None:
         self._producer = AsyncKafkaProducer(bootstrap_servers=settings.kafka_bootstrap_servers)
         self._random = random.Random()
+        self._health_task: asyncio.Task[None] | None = None
 
     async def run(self) -> None:
         """Start Kafka and continuously publish order events."""
         await self._producer.start()
+        self._health_task = asyncio.create_task(self._healthbeat_loop(), name="demand-simulator-health")
         logger.info(
-            "Demand simulator started. Interval range: %ss-%ss. simulation_speed=%sx",
-            settings.simulation_min_interval_seconds,
-            settings.simulation_max_interval_seconds,
-            settings.simulation_speed,
+            "Demand simulator started. interval=%ss-%ss speed=%sx demo_profile=%s",
+            settings.effective_min_interval_seconds,
+            settings.effective_max_interval_seconds,
+            settings.effective_simulation_speed,
+            settings.is_demo_profile,
         )
         try:
             while True:
                 await self._simulate_order()
                 base_interval = self._random.randint(
-                    settings.simulation_min_interval_seconds,
-                    settings.simulation_max_interval_seconds,
+                    settings.effective_min_interval_seconds,
+                    settings.effective_max_interval_seconds,
                 )
-                effective_interval = max(base_interval / max(settings.simulation_speed, 0.1), 1)
+                effective_interval = max(base_interval / max(settings.effective_simulation_speed, 0.1), 1)
                 await asyncio.sleep(effective_interval)
         finally:
+            if self._health_task is not None:
+                self._health_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._health_task
             await self._producer.stop()
 
     async def _simulate_order(self) -> None:
         """Generate and publish one order event."""
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(Product).where(Product.is_active.is_(True), Product.stock_quantity > 0).order_by(Product.id)
-            )
-            products = result.scalars().all()
-            if not products:
-                logger.warning("No in-stock active products available. Demand iteration skipped.")
-                return
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(Product).where(Product.is_active.is_(True), Product.stock_quantity > 0).order_by(Product.id)
+                )
+                products = result.scalars().all()
+                if not products:
+                    logger.warning("No in-stock active products available. Demand iteration skipped.")
+                    return
 
-            scenario = self._pick_scenario()
-            product = self._pick_product(products, scenario)
-            quantity = self._pick_quantity(product, scenario)
-            quantity = min(quantity, product.stock_quantity)
-            timestamp = datetime.now(UTC)
+                scenario = self._pick_scenario()
+                product = self._pick_product(products, scenario)
+                quantity = self._pick_quantity(product, scenario)
+                quantity = min(quantity, product.stock_quantity)
+                timestamp = datetime.now(UTC)
 
-            event = {
-                "event_id": str(uuid4()),
-                "product_id": product.id,
-                "quantity": quantity,
-                "customer_region": self._random.choice(REGIONS),
-                "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
-            }
-            await self._producer.send("orders", event, key=str(product.id))
+                event = {
+                    "event_id": str(uuid4()),
+                    "product_id": product.id,
+                    "quantity": quantity,
+                    "customer_region": self._random.choice(REGIONS),
+                    "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+                }
+                request_id = ensure_request_id(event)
+                await self._producer.send("orders", event, key=str(product.id))
 
-            logger.info(
-                "Published order event: product_id=%s product=%s category=%s quantity=%s region=%s price=%s scenario=%s",
-                product.id,
-                product.name,
-                product.category,
-                quantity,
-                event["customer_region"],
-                product.our_price,
-                scenario,
-            )
+                logger.info(
+                    "Published order event: request_id=%s product_id=%s product=%s category=%s quantity=%s region=%s price=%s scenario=%s",
+                    request_id,
+                    product.id,
+                    product.name,
+                    product.category,
+                    quantity,
+                    event["customer_region"],
+                    product.our_price,
+                    scenario,
+                )
+        finally:
+            clear_request_id()
 
     def _pick_scenario(self) -> str:
         """Choose between baseline traffic, steady buying, and scarcity bursts."""
@@ -136,6 +147,12 @@ class DemandSimulator:
         if roll < 0.94:
             return 2
         return 3
+
+    async def _healthbeat_loop(self) -> None:
+        """Refresh healthcheck heartbeat while service runs."""
+        while True:
+            touch_healthcheck(settings.healthcheck_file)
+            await asyncio.sleep(10)
 
 
 async def main() -> None:

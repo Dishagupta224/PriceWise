@@ -30,6 +30,9 @@ export default function useWebSocket(url) {
       socket.onmessage = (event) => {
         try {
           const parsed = JSON.parse(event.data);
+          if (parsed?.type === "PING" && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "PONG" }));
+          }
           setMessages((current) => [parsed, ...current].slice(0, MAX_MESSAGES));
         } catch {
           setMessages((current) => [{ type: "RAW", data: event.data }, ...current].slice(0, MAX_MESSAGES));

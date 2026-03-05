@@ -306,3 +306,18 @@ async def update_product(
     _validate_margin(product)
     await session.commit()
     return await _get_product_or_404(session, product_id)
+
+
+@router.delete("/{product_id}", status_code=status.HTTP_200_OK)
+async def delete_product(
+    product_id: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, str]:
+    """Delete an existing product."""
+    product = await session.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+
+    await session.delete(product)
+    await session.commit()
+    return {"status": "deleted"}

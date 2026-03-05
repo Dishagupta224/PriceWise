@@ -17,13 +17,11 @@ from app.models import Base
 from app.rule_engine import RuleDecision, RuleEngine
 from shared.database import AsyncSessionLocal, engine
 from shared.kafka_utils import AsyncKafkaConsumer, AsyncKafkaProducer
+from shared.observability import clear_request_id, configure_logging, ensure_request_id, set_request_id, touch_healthcheck
 
 settings = get_settings()
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s [pricing-agent] %(message)s",
-)
+configure_logging("pricing-agent", settings.log_level)
 logger = logging.getLogger(__name__)
 
 
@@ -113,16 +111,19 @@ class PricingAgentService:
                     break
 
                 event = message["value"]
+                request_id = ensure_request_id(event)
                 self._metrics.events_received += 1
 
                 if event.get("_invalid_json"):
-                    logger.warning("Skipping invalid price-change payload: %s", event.get("_raw"))
+                    logger.warning("Skipping invalid price-change payload: request_id=%s raw=%s", request_id, event.get("_raw"))
                     self._metrics.events_ignored += 1
                     await self._consumer.commit()
+                    clear_request_id()
                     continue
 
                 await self._queue.put(event)
                 await self._consumer.commit()
+                clear_request_id()
         finally:
             await self.shutdown()
 
@@ -174,56 +175,73 @@ class PricingAgentService:
 
     async def _process_event(self, event: dict[str, object], worker_id: int) -> None:
         """Run the full pipeline for one price-change event."""
-        product_id = event.get("product_id")
-        logger.info("Worker %s received event for product_id=%s event_id=%s", worker_id, product_id, event.get("event_id"))
-
-        async with AsyncSessionLocal() as session:
-            evaluation = await self._rule_engine.evaluate(event, session)
-
-        logger.info(
-            "Pipeline step rule-engine: product_id=%s decision=%s reason=%s",
-            product_id,
-            evaluation.decision.value,
-            evaluation.reason,
-        )
-
-        if evaluation.decision is RuleDecision.IGNORE:
-            self._metrics.events_ignored += 1
-            return
-
-        if evaluation.decision is RuleDecision.DIRECT_ACTION:
-            if evaluation.direct_topic and evaluation.direct_payload:
-                await self._producer.send(evaluation.direct_topic, evaluation.direct_payload, key=str(product_id))
-            self._metrics.events_processed += 1
-            self._metrics.decisions_made += 1
-            logger.warning(
-                "Pipeline action direct: product_id=%s topic=%s reason=%s",
+        request_id = ensure_request_id(event)
+        try:
+            product_id = event.get("product_id")
+            logger.info(
+                "Worker %s received event for request_id=%s product_id=%s event_id=%s",
+                worker_id,
+                request_id,
                 product_id,
-                evaluation.direct_topic,
+                event.get("event_id"),
+            )
+
+            async with AsyncSessionLocal() as session:
+                evaluation = await self._rule_engine.evaluate(event, session)
+
+            logger.info(
+                "Pipeline step rule-engine: product_id=%s decision=%s reason=%s",
+                product_id,
+                evaluation.decision.value,
                 evaluation.reason,
             )
-            return
 
-        started = time.perf_counter()
-        result = await self._agent.process_event(event)
-        decision_seconds = time.perf_counter() - started
+            if evaluation.decision is RuleDecision.IGNORE:
+                self._metrics.events_ignored += 1
+                return
 
-        await self._producer.send("price-decisions", result.to_kafka_payload(int(product_id)), key=str(product_id))
-        if result.alert_payload is not None:
-            await self._producer.send("alerts", result.alert_payload, key=str(product_id))
+            if evaluation.decision is RuleDecision.DIRECT_ACTION:
+                if evaluation.direct_topic and evaluation.direct_payload:
+                    evaluation.direct_payload["request_id"] = request_id
+                    await self._producer.send(evaluation.direct_topic, evaluation.direct_payload, key=str(product_id))
+                self._metrics.events_processed += 1
+                self._metrics.decisions_made += 1
+                logger.warning(
+                    "Pipeline action direct: product_id=%s topic=%s reason=%s",
+                    product_id,
+                    evaluation.direct_topic,
+                    evaluation.reason,
+                )
+                return
 
-        self._metrics.events_processed += 1
-        self._metrics.decisions_made += 1
-        self._metrics.total_decision_seconds += decision_seconds
+            started = time.perf_counter()
+            result = await self._agent.process_event(event)
+            decision_seconds = time.perf_counter() - started
 
-        logger.info(
-            "Pipeline completed: product_id=%s rule=%s agent_decision=%s execution_status=%s action_time=%.2fs",
-            product_id,
-            evaluation.decision.value,
-            result.decision_type.value,
-            result.execution_status.value,
-            decision_seconds,
-        )
+            set_request_id(request_id)
+            await self._producer.send(
+                "price-decisions",
+                result.to_kafka_payload(int(product_id), request_id=request_id),
+                key=str(product_id),
+            )
+            if result.alert_payload is not None:
+                result.alert_payload["request_id"] = request_id
+                await self._producer.send("alerts", result.alert_payload, key=str(product_id))
+
+            self._metrics.events_processed += 1
+            self._metrics.decisions_made += 1
+            self._metrics.total_decision_seconds += decision_seconds
+
+            logger.info(
+                "Pipeline completed: product_id=%s rule=%s agent_decision=%s execution_status=%s action_time=%.2fs",
+                product_id,
+                evaluation.decision.value,
+                result.decision_type.value,
+                result.execution_status.value,
+                decision_seconds,
+            )
+        finally:
+            clear_request_id()
 
     async def _log_metrics_loop(self) -> None:
         """Emit periodic metrics while the service is running."""
@@ -241,9 +259,8 @@ class PricingAgentService:
 
     async def _healthbeat_loop(self) -> None:
         """Continuously refresh a healthcheck heartbeat file while the service is alive."""
-        self._health_path.parent.mkdir(parents=True, exist_ok=True)
         while True:
-            self._health_path.write_text("ok", encoding="utf-8")
+            touch_healthcheck(str(self._health_path))
             await asyncio.sleep(10)
 
     def _install_signal_handlers(self) -> None:

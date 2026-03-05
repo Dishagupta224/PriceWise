@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     websocket_queue_size: int = 200
     websocket_ping_interval_seconds: int = 20
     websocket_pong_timeout_seconds: int = 45
+    log_level: str = "INFO"
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

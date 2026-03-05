@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     inventory_consumer_group: str = "inventory-service"
     low_stock_threshold: int = 15
     log_level: str = "INFO"
+    healthcheck_file: str = "/tmp/inventory-service.healthy"
 
 
 @lru_cache

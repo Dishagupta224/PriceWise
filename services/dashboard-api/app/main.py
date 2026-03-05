@@ -1,8 +1,11 @@
 """FastAPI application entrypoint."""
 
 from contextlib import asynccontextmanager
+import logging
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
@@ -12,8 +15,11 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.products import router as products_router
 from app.seed import init_db
 from app.websocket_manager import WebSocketManager
+from shared.observability import clear_request_id, configure_logging, set_request_id
 
 settings = get_settings()
+configure_logging("dashboard-api", settings.log_level)
+logger = logging.getLogger(__name__)
 websocket_manager = WebSocketManager()
 live_bridge = KafkaWebSocketBridge(websocket_manager)
 
@@ -41,6 +47,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Attach request ID to every HTTP request/response cycle."""
+    request_id = request.headers.get("x-request-id") or str(uuid4())
+    request.state.request_id = request_id
+    set_request_id(request_id)
+    try:
+        response = await call_next(request)
+    except Exception:
+        clear_request_id()
+        raise
+    response.headers["x-request-id"] = request_id
+    clear_request_id()
+    return response
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Return structured 500 responses with request IDs."""
+    request_id = getattr(request.state, "request_id", str(uuid4()))
+    logger.exception("Unhandled request error path=%s request_id=%s", request.url.path, request_id)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "request_id": request_id,
+        },
+    )
 
 
 @app.get("/health", tags=["health"])

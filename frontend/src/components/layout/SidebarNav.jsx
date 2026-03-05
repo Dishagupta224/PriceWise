@@ -1,10 +1,12 @@
-import { Activity, Boxes, LayoutDashboard, PanelRightOpen } from "lucide-react";
+import { Activity, Bell, Boxes, LayoutDashboard, PanelRightOpen, Percent } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/products", label: "Products", icon: Boxes },
   { to: "/decisions", label: "Decisions", icon: Activity },
+  { to: "/alerts", label: "Alerts", icon: Bell },
+  { to: "/insights/margin", label: "Margin Insights", icon: Percent },
 ];
 
 function SidebarNav() {
