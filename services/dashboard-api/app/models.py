@@ -134,3 +134,19 @@ class OrderEvent(Base):
     quantity: Mapped[int] = mapped_column(nullable=False)
     customer_region: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class RuntimeAccessSession(Base):
+    """Tracks user visits that activate background runtime for a limited window."""
+
+    __tablename__ = "runtime_access_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)

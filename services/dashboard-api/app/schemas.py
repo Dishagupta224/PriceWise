@@ -293,3 +293,14 @@ class PaginatedDecisionsResponse(BaseModel):
 
     items: list[DecisionListItem]
     pagination: PaginationMeta
+
+
+class RuntimeSessionStatusResponse(BaseModel):
+    """Runtime session status for the current user and daily quota usage."""
+
+    active: bool
+    expires_at: datetime | None = None
+    activations_used_today: int
+    activations_limit_per_day: int
+    activations_remaining_today: int
+    message: str | None = None

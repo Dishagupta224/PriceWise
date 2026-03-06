@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom";
+import OnboardingTour from "../OnboardingTour";
 import HeaderBar from "./HeaderBar";
 import SidebarNav from "./SidebarNav";
 
@@ -8,6 +9,7 @@ function AppLayout() {
       <SidebarNav />
       <div className="min-w-0">
         <HeaderBar />
+        <OnboardingTour />
         <main className="px-4 pb-8 pt-4 sm:px-6 lg:px-8">
           <Outlet />
         </main>

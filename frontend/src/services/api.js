@@ -5,6 +5,18 @@ const api = axios.create({
   timeout: 10000,
 });
 
+const RUNTIME_USER_ID_KEY = "pricewise_runtime_user_id";
+
+function getOrCreateRuntimeUserId() {
+  const existing = window.localStorage.getItem(RUNTIME_USER_ID_KEY);
+  if (existing) {
+    return existing;
+  }
+  const generated = (window.crypto?.randomUUID?.() || `pw-${Date.now()}-${Math.round(Math.random() * 1e9)}`).slice(0, 64);
+  window.localStorage.setItem(RUNTIME_USER_ID_KEY, generated);
+  return generated;
+}
+
 export async function getProducts(page = 1, filters = {}) {
   const { data } = await api.get("/products", {
     params: {
@@ -72,6 +84,24 @@ export async function updateProduct(id, payload) {
 
 export async function deleteProduct(id) {
   await api.delete(`/products/${id}`);
+}
+
+export async function startRuntimeSession() {
+  const { data } = await api.post(
+    "/runtime-session/start",
+    {},
+    {
+      headers: { "x-user-id": getOrCreateRuntimeUserId() },
+    },
+  );
+  return data;
+}
+
+export async function getRuntimeSessionStatus() {
+  const { data } = await api.get("/runtime-session/status", {
+    headers: { "x-user-id": getOrCreateRuntimeUserId() },
+  });
+  return data;
 }
 
 export default api;

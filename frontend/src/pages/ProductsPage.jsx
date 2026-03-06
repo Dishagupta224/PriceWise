@@ -401,8 +401,8 @@ function ProductsPage() {
         />
       ) : (
         <section className="space-y-4">
-          <div className="table-shell">
-            <table>
+          <div className="table-shell overflow-x-auto">
+            <table className="min-w-[1320px]">
               <thead>
                 <tr>
                   <SortHeader label="Product Name" sortKey="name" sortBy={filters.sortBy} sortOrder={filters.sortOrder} onToggle={toggleSort} />

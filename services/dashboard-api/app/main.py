@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.kafka_websocket_bridge import KafkaWebSocketBridge
 from app.routes.live import create_live_router
+from app.routes.runtime_session import router as runtime_session_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.products import router as products_router
 from app.seed import init_db
@@ -88,6 +89,9 @@ async def health_check() -> dict[str, str]:
 app.include_router(products_router, prefix="/api")
 app.include_router(products_router, prefix="/api/v1")
 app.include_router(products_router)
+app.include_router(runtime_session_router, prefix="/api")
+app.include_router(runtime_session_router, prefix="/api/v1")
+app.include_router(runtime_session_router)
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(dashboard_router)

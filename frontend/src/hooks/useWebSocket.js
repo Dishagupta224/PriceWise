@@ -8,8 +8,48 @@ export default function useWebSocket(url) {
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef(null);
   const manuallyClosedRef = useRef(false);
+  const seenKeysRef = useRef(new Set());
+  const seenOrderRef = useRef([]);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
+
+  const rememberMessageKey = (key) => {
+    if (!key) {
+      return true;
+    }
+    if (seenKeysRef.current.has(key)) {
+      return false;
+    }
+    seenKeysRef.current.add(key);
+    seenOrderRef.current.push(key);
+    if (seenOrderRef.current.length > 300) {
+      const oldest = seenOrderRef.current.shift();
+      if (oldest) {
+        seenKeysRef.current.delete(oldest);
+      }
+    }
+    return true;
+  };
+
+  const getMessageKey = (message) => {
+    if (!message || typeof message !== "object") {
+      return null;
+    }
+    if (message.type === "CONNECTED") {
+      // Keep only one recent "connected" card in the live feed.
+      return "CONNECTED:live-feed";
+    }
+    const eventId = message?.data?.event_id;
+    if (eventId) {
+      return `${message.type}:${eventId}`;
+    }
+    const productId = message?.data?.product_id ?? "na";
+    const competitor = message?.data?.competitor_name ?? "na";
+    const oldPrice = message?.data?.old_price ?? "na";
+    const newPrice = message?.data?.new_price ?? "na";
+    const timestamp = message?.timestamp ?? "na";
+    return `${message.type}:${productId}:${competitor}:${oldPrice}:${newPrice}:${timestamp}`;
+  };
 
   useEffect(() => {
     if (!url) {
@@ -32,6 +72,13 @@ export default function useWebSocket(url) {
           const parsed = JSON.parse(event.data);
           if (parsed?.type === "PING" && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: "PONG" }));
+            return;
+          }
+          if (parsed?.type === "PONG") {
+            return;
+          }
+          if (!rememberMessageKey(getMessageKey(parsed))) {
+            return;
           }
           setMessages((current) => [parsed, ...current].slice(0, MAX_MESSAGES));
         } catch {

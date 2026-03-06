@@ -40,3 +40,14 @@ class CompetitorPrice(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class RuntimeAccessSession(Base):
+    """Read model for runtime activation windows created by dashboard visits."""
+
+    __tablename__ = "runtime_access_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)

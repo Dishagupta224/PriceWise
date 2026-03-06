@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.database import AsyncSessionLocal
-from app.models import Product
+from app.models import Product, RuntimeAccessSession
 from shared.kafka_utils import AsyncKafkaProducer
 from shared.observability import clear_request_id, configure_logging, ensure_request_id, touch_healthcheck
 
@@ -36,6 +36,7 @@ class DemandSimulator:
         self._producer = AsyncKafkaProducer(bootstrap_servers=settings.kafka_bootstrap_servers)
         self._random = random.Random()
         self._health_task: asyncio.Task[None] | None = None
+        self._runtime_idle_logged = False
 
     async def run(self) -> None:
         """Start Kafka and continuously publish order events."""
@@ -50,6 +51,13 @@ class DemandSimulator:
         )
         try:
             while True:
+                if not await self._is_runtime_active():
+                    if not self._runtime_idle_logged:
+                        logger.info("Runtime session inactive. Demand simulator is idling in background.")
+                        self._runtime_idle_logged = True
+                    await asyncio.sleep(3)
+                    continue
+                self._runtime_idle_logged = False
                 await self._simulate_order()
                 base_interval = self._random.randint(
                     settings.effective_min_interval_seconds,
@@ -153,6 +161,23 @@ class DemandSimulator:
         while True:
             touch_healthcheck(settings.healthcheck_file)
             await asyncio.sleep(10)
+
+    async def _is_runtime_active(self) -> bool:
+        """Return True when any dashboard-activated runtime session is still valid."""
+        now = datetime.now(UTC)
+        try:
+            async with AsyncSessionLocal() as session:
+                active_id = (
+                    await session.execute(
+                        select(RuntimeAccessSession.id)
+                        .where(RuntimeAccessSession.expires_at > now)
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+            return active_id is not None
+        except Exception:
+            logger.warning("Runtime session check failed; demand simulator will stay idle.")
+            return False
 
 
 async def main() -> None:

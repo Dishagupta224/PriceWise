@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from typing import Any
 from uuid import uuid4
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, RateLimitError
+from sqlalchemy import select
 
 from app.agent_tools import (
     OPENAI_TOOL_FUNCTIONS,
@@ -23,7 +25,7 @@ from app.agent_tools import (
 )
 from app.config import get_settings
 from app.enums import AgentDecisionType, ExecutionStatus
-from app.models import AgentDecision
+from app.models import AgentDecision, RuntimeAccessSession
 from shared.database import AsyncSessionLocal
 
 settings = get_settings()
@@ -116,6 +118,14 @@ class PricingDecisionAgent:
             await self._log_decision(product_id, result)
             return result
 
+        if not await self._is_runtime_active():
+            result = self._fallback_hold(
+                source_event_id=source_event_id,
+                reason="Runtime session inactive. Open the dashboard to activate AI for 5 minutes.",
+            )
+            await self._log_decision(product_id, result)
+            return result
+
         try:
             decision, tools_used = await self._run_agent_loop(event)
             result = await self._execute_decision(product_id, source_event_id, event, decision, tools_used)
@@ -128,6 +138,23 @@ class PricingDecisionAgent:
 
         await self._log_decision(product_id, result)
         return result
+
+    async def _is_runtime_active(self) -> bool:
+        """Return True when at least one non-expired runtime session exists."""
+        now = datetime.now(UTC)
+        try:
+            async with AsyncSessionLocal() as session:
+                active_id = (
+                    await session.execute(
+                        select(RuntimeAccessSession.id)
+                        .where(RuntimeAccessSession.expires_at > now)
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+            return active_id is not None
+        except Exception:
+            logger.warning("Runtime session check failed; defaulting to inactive.")
+            return False
 
     async def _run_agent_loop(self, event: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         """Run a multi-turn tool-calling loop until the model returns a final decision JSON object."""
@@ -537,7 +564,50 @@ class PricingDecisionAgent:
                     )
                     return (AgentDecisionType.PRICE_INCREASE, candidate, reasoning, max(current_confidence, 0.84))
 
+            if self._should_rebalance_hold(source_event):
+                if market_gap_percent <= Decimal("-0.5") and current_price > min_allowed_price:
+                    target_drop_percent = min(
+                        Decimal(str(settings.max_price_drop_percent_per_action)),
+                        max(Decimal("1.0"), abs(market_gap_percent) * Decimal("0.45")),
+                    )
+                    candidate = current_price * (Decimal("1") - (target_drop_percent / Decimal("100")))
+                    candidate = max(candidate.quantize(Decimal("0.01")), min_allowed_price)
+                    if candidate < current_price:
+                        reasoning = (
+                            f"{current_reasoning} Policy rebalance applied to reduce HOLD dominance: "
+                            f"safe strategic drop to {candidate}."
+                        )
+                        return (AgentDecisionType.PRICE_DROP, candidate, reasoning, max(current_confidence, 0.8))
+
+                if market_gap_percent >= Decimal("0.5"):
+                    safe_ceiling = cheapest_competitor_price * (
+                        Decimal("1") - (Decimal(str(settings.competitor_price_buffer_percent)) / Decimal("100"))
+                    )
+                    safe_ceiling = safe_ceiling.quantize(Decimal("0.01"))
+                    target_increase_percent = min(
+                        Decimal(str(settings.max_price_increase_percent_per_action)),
+                        max(Decimal("1.0"), market_gap_percent * Decimal("0.45")),
+                    )
+                    candidate = current_price * (Decimal("1") + (target_increase_percent / Decimal("100")))
+                    candidate = min(candidate.quantize(Decimal("0.01")), safe_ceiling)
+                    if candidate > current_price:
+                        reasoning = (
+                            f"{current_reasoning} Policy rebalance applied to reduce HOLD dominance: "
+                            f"safe strategic increase to {candidate}."
+                        )
+                        return (AgentDecisionType.PRICE_INCREASE, candidate, reasoning, max(current_confidence, 0.8))
+
         return None
+
+    def _should_rebalance_hold(self, source_event: dict[str, Any]) -> bool:
+        """Deterministically rebalance about 75% of HOLD outputs into safe actions."""
+        key = str(
+            source_event.get("event_id")
+            or source_event.get("request_id")
+            or f"{source_event.get('product_id', 'unknown')}-{source_event.get('timestamp', 'unknown')}"
+        )
+        bucket = int(hashlib.md5(key.encode("utf-8")).hexdigest()[:8], 16) % 100
+        return bucket < 75
 
     def _validate_event_direction_consistency(
         self,
@@ -556,6 +626,10 @@ class PricingDecisionAgent:
 
         trend = str(demand_trend.get("trend") or "stable").lower()
         if trend == "falling":
+            return None
+
+        gap_percent = market_position.get("price_gap_to_cheapest_percent")
+        if gap_percent is not None and Decimal(str(gap_percent)) <= Decimal("-1.0"):
             return None
 
         cheapest_competitor = market_position.get("cheapest_competitor_price")
