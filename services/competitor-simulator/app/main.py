@@ -43,9 +43,9 @@ DROP_SCENARIO = ScenarioPlan("drop-pressure", Decimal("0.94"), Decimal("0.975"),
 INCREASE_SCENARIO = ScenarioPlan("increase-headroom", Decimal("1.025"), Decimal("1.06"), 0.30)
 SCENARIOS = (NEUTRAL_SCENARIO, DROP_SCENARIO, INCREASE_SCENARIO)
 CYCLE_SIZE = 20
-NEUTRAL_PER_CYCLE = 5
-DROP_PER_CYCLE = 9
-INCREASE_PER_CYCLE = 6
+NEUTRAL_PER_CYCLE = 10
+DROP_PER_CYCLE = 6
+INCREASE_PER_CYCLE = 4
 
 
 def to_money(value: Decimal) -> Decimal:
@@ -69,7 +69,7 @@ class CompetitorPriceSimulator:
         await self._producer.start()
         self._health_task = asyncio.create_task(self._healthbeat_loop(), name="competitor-simulator-health")
         logger.info(
-            "Competitor simulator started. interval=%ss-%ss speed=%sx demo_profile=%s mix=25%% neutral 45%% drop 30%% increase",
+            "Competitor simulator started. interval=%ss-%ss speed=%sx demo_profile=%s mix=50%% neutral 30%% drop 20%% increase",
             settings.effective_min_interval_seconds,
             settings.effective_max_interval_seconds,
             settings.effective_simulation_speed,
@@ -160,7 +160,7 @@ class CompetitorPriceSimulator:
             clear_request_id()
 
     def _pick_scenario(self) -> ScenarioPlan:
-        """Return a deterministic scenario so every 20 events follow the 25/45/30 mix."""
+        """Return a deterministic scenario so every 20 events follow the 50/30/20 mix."""
         if self._scenario_index >= len(self._scenario_cycle):
             self._reset_scenario_cycle()
 
