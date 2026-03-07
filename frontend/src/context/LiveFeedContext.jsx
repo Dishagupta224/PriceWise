@@ -4,8 +4,14 @@ import useWebSocket from "../hooks/useWebSocket";
 const LiveFeedContext = createContext(null);
 
 function buildWebSocketUrl() {
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL;
+  const explicitUrl = import.meta.env.VITE_WS_URL;
+  if (explicitUrl) {
+    return explicitUrl;
+  }
+
+  const configuredBase = import.meta.env.VITE_WS_BASE_URL;
+  if (configuredBase) {
+    return `${configuredBase.replace(/\/+$/, "")}/ws/live-feed`;
   }
 
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";

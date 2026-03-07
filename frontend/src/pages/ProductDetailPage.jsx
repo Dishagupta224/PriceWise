@@ -10,6 +10,11 @@ import { getDecision, getDecisions, getProduct, getProductPriceHistory } from ".
 import { compactDateTime, formatCurrency, formatPercent, formatNumber, stockTone } from "../utils/formatters";
 
 function buildProductWebSocketUrl(productId) {
+  const configuredBase = import.meta.env.VITE_WS_BASE_URL;
+  if (configuredBase) {
+    return `${configuredBase.replace(/\/+$/, "")}/ws/product/${productId}`;
+  }
+
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.hostname || "localhost";
   return `${protocol}://${host}:8000/ws/product/${productId}`;
