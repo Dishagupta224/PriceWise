@@ -14,8 +14,8 @@ from app.schemas import RuntimeSessionStatusResponse
 
 router = APIRouter(prefix="/runtime-session", tags=["runtime-session"])
 
-SESSION_DURATION_MINUTES = 5
-MAX_ACTIVATIONS_PER_DAY = 25
+SESSION_DURATION_MINUTES = 8
+MAX_ACTIVATIONS_PER_DAY = 15
 RUNTIME_START_LOCK_ID = 947321
 
 
@@ -60,7 +60,7 @@ async def _build_status(session: AsyncSession, user_id: str, now: datetime) -> R
     elif remaining == 0:
         message = "Global daily limit reached. Runtime will reset tomorrow."
     else:
-        message = "Runtime inactive. Visit refresh starts a 5-minute session."
+        message = "Runtime inactive. Visit refresh starts an 8-minute session."
 
     return RuntimeSessionStatusResponse(
         active=active,

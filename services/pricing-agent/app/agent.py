@@ -121,7 +121,7 @@ class PricingDecisionAgent:
         if not await self._is_runtime_active():
             result = self._fallback_hold(
                 source_event_id=source_event_id,
-                reason="Runtime session inactive. Open the dashboard to activate AI for 5 minutes.",
+                reason="Runtime session inactive. Open the dashboard to activate AI for 8 minutes.",
             )
             await self._log_decision(product_id, result)
             return result

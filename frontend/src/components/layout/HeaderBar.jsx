@@ -42,7 +42,7 @@ function HeaderBar() {
           if (status.active) {
             setStatusMessage("");
           } else if (wasActiveRef.current && !status.active) {
-            setStatusMessage("Your 5-minute AI usage window has ended.");
+            setStatusMessage("Your 8-minute AI usage window has ended.");
           } else if (!status.active && Number(status.activations_remaining_today) === 0) {
             setStatusMessage("Daily AI usage limit reached. Try again tomorrow.");
           }
@@ -98,7 +98,7 @@ function HeaderBar() {
         : current,
     );
     if (!statusMessage) {
-      setStatusMessage("Your 5-minute AI usage window has ended.");
+      setStatusMessage("Your 8-minute AI usage window has ended.");
     }
   }, [runtimeStatus, runtimeSecondsRemaining, statusMessage]);
 
