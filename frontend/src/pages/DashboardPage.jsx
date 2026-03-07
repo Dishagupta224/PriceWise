@@ -117,7 +117,7 @@ function DashboardPage() {
         <SummaryCard
           label="Active Alerts"
           value={formatNumber(alertCount)}
-          hint={`${formatNumber(summary?.overpriced_products)} overpriced products still need attention. Click to open the Alerts page.`}
+          hint="Low-stock and out-of-stock alerts that need inventory action. Click to open the Alerts page."
           tone={alertCount > 0 ? "danger" : "success"}
           icon={AlertTriangle}
           onClick={() => navigate("/alerts")}

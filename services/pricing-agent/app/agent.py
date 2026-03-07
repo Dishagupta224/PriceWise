@@ -114,6 +114,8 @@ class PricingDecisionAgent:
             result = self._fallback_hold(
                 source_event_id=source_event_id,
                 reason="OpenAI API key is not configured. Falling back to HOLD.",
+                product_id=product_id,
+                source_event_data=event,
             )
             await self._log_decision(product_id, result)
             return result
@@ -122,6 +124,8 @@ class PricingDecisionAgent:
             result = self._fallback_hold(
                 source_event_id=source_event_id,
                 reason="Runtime session inactive. Open the dashboard to activate AI for 8 minutes.",
+                product_id=product_id,
+                source_event_data=event,
             )
             await self._log_decision(product_id, result)
             return result
@@ -134,6 +138,8 @@ class PricingDecisionAgent:
             result = self._fallback_hold(
                 source_event_id=source_event_id,
                 reason=f"Agent execution failed: {exc}",
+                product_id=product_id,
+                source_event_data=event,
             )
 
         await self._log_decision(product_id, result)
@@ -294,6 +300,7 @@ class PricingDecisionAgent:
                     source_event_id=source_event_id,
                     reason="Agent requested a price change but did not return a valid proposed_price.",
                     tools_used=tools_used,
+                    product_id=product_id,
                     product_name=product_name,
                     current_price=current_price,
                     source_event_data=source_event,
@@ -311,6 +318,7 @@ class PricingDecisionAgent:
                     source_event_id=source_event_id,
                     reason=direction_failure,
                     tools_used=tools_used,
+                    product_id=product_id,
                     product_name=product_name,
                     current_price=current_price,
                     source_event_data=source_event,
@@ -327,6 +335,7 @@ class PricingDecisionAgent:
                     source_event_id=source_event_id,
                     reason=guardrail_failure,
                     tools_used=tools_used,
+                    product_id=product_id,
                     product_name=product_name,
                     current_price=current_price,
                     source_event_data=source_event,
@@ -357,6 +366,11 @@ class PricingDecisionAgent:
                     execution_status=ExecutionStatus.REJECTED,
                     proposed_price=proposed_price,
                     update_result=update_result,
+                    alert_payload=self._build_human_intervention_alert(
+                        product_id=product_id,
+                        reason=final_reasoning,
+                        source_event_id=source_event_id,
+                    ),
                     source_event_id=source_event_id,
                     audit_reasoning=self._build_decision_audit_reasoning(
                         decision_type=AgentDecisionType.PRICE_HOLD,
@@ -455,6 +469,7 @@ class PricingDecisionAgent:
         source_event_id: str | None,
         reason: str,
         tools_used: list[str] | None = None,
+        product_id: int | None = None,
         product_name: str | None = None,
         current_price: Decimal | None = None,
         source_event_data: dict[str, Any] | None = None,
@@ -467,6 +482,11 @@ class PricingDecisionAgent:
             confidence_score=0.0,
             tools_used=tools_used or [],
             execution_status=ExecutionStatus.REJECTED,
+            alert_payload=self._build_human_intervention_alert(
+                product_id=product_id,
+                reason=reason,
+                source_event_id=source_event_id,
+            ),
             source_event_id=source_event_id,
             audit_reasoning=(
                 self._build_decision_audit_reasoning(
@@ -482,6 +502,25 @@ class PricingDecisionAgent:
                 else reason
             ),
         )
+
+    def _build_human_intervention_alert(
+        self,
+        *,
+        product_id: int | None,
+        reason: str,
+        source_event_id: str | None,
+    ) -> dict[str, Any] | None:
+        """Build an alerts-topic payload when AI decision execution is rejected and needs review."""
+        if product_id is None:
+            return None
+        return {
+            "event_id": str(uuid4()),
+            "product_id": product_id,
+            "alert_type": "HUMAN_INTERVENTION_REQUIRED",
+            "reason": reason,
+            "source_event_id": source_event_id,
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        }
 
     def _build_event_prompt(self, event: dict[str, Any]) -> str:
         """Build the user prompt containing the market event and decision instructions."""

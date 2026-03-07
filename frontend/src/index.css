@@ -9,6 +9,7 @@
 body {
   @apply min-h-screen bg-ink bg-dashboard-grid bg-[size:28px_28px] text-slate-100 antialiased;
   background-color: #081018;
+  overflow-x: hidden;
 }
 
 #root {

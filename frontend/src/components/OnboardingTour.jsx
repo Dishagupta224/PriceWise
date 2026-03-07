@@ -63,6 +63,7 @@ function OnboardingTour() {
   function nextStep() {
     if (isLast) {
       closeTour();
+      navigate("/", { replace: true });
       return;
     }
     const nextIndex = Math.min(step + 1, TOUR_STEPS.length - 1);

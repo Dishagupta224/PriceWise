@@ -359,6 +359,11 @@ function DecisionsPage() {
                             <p className="text-sm text-muted">{formatRelativeTime(decision.created_at)}</p>
                             <h3 className="mt-1 text-lg font-semibold text-slate-50">{decision.product_name}</h3>
                             <p className="text-xs text-muted">Product #{decision.product_id}</p>
+                            {decision.execution_status === "REJECTED" ? (
+                              <p className="mt-2 inline-flex rounded-full border border-warning/40 bg-warning/10 px-2 py-1 text-xs font-medium text-warning">
+                                Human intervention needed
+                              </p>
+                            ) : null}
                           </div>
 
                           <div className="flex items-center gap-3">

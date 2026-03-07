@@ -110,10 +110,10 @@ function HeaderBar() {
 
   return (
     <header className="sticky top-0 z-10 border-b border-line/70 bg-ink/80 backdrop-blur">
-      <div className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+      <div className="flex flex-col items-start gap-3 px-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div>
           <p className="label">Pricing Operations</p>
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-50">SmartPriceAgent</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-50 sm:text-2xl">SmartPriceAgent</h2>
         </div>
 
         <div
@@ -131,10 +131,11 @@ function HeaderBar() {
             ].join(" ")}
           />
           {isConnected ? <Wifi size={14} /> : <WifiOff size={14} />}
-          <span>{isConnected ? "Live feed connected" : "WebSocket disconnected"}</span>
+          <span className="hidden sm:inline">{isConnected ? "Live feed connected" : "WebSocket disconnected"}</span>
+          <span className="sm:hidden">{isConnected ? "Live" : "Offline"}</span>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 px-4 pb-3 sm:px-6 lg:px-8">
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-3 sm:px-6 lg:px-8">
         <div className={["status-pill", runtimeBadgeClass].join(" ")}>
           <span>
             {runtimeStatus?.active

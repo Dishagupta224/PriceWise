@@ -11,18 +11,18 @@ const links = [
 
 function SidebarNav() {
   return (
-    <aside className="border-b border-line/70 bg-slate-950/[0.35] px-4 py-4 backdrop-blur lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-6">
-      <div className="panel-soft mb-6 flex items-center gap-3 px-4 py-4">
+    <aside className="border-b border-line/70 bg-slate-950/[0.35] px-3 py-3 backdrop-blur lg:min-h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-6">
+      <div className="panel-soft mb-4 flex items-center gap-3 px-3 py-3 lg:mb-6 lg:px-4 lg:py-4">
         <div className="rounded-2xl bg-accent/[0.15] p-3 text-accent">
           <PanelRightOpen size={20} />
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="label">Command Center</p>
-          <h1 className="text-lg font-semibold text-slate-50">SmartPriceAgent</h1>
+          <h1 className="truncate text-base font-semibold text-slate-50 lg:text-lg">SmartPriceAgent</h1>
         </div>
       </div>
 
-      <nav className="flex gap-2 overflow-x-auto lg:flex-col">
+      <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
         {links.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -30,7 +30,7 @@ function SidebarNav() {
             end={to === "/"}
             className={({ isActive }) =>
               [
-                "flex min-w-fit items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition",
+                "flex min-w-fit items-center gap-2 rounded-2xl border px-3 py-2.5 text-sm transition lg:gap-3 lg:px-4 lg:py-3",
                 isActive
                   ? "border-accent/40 bg-accent/[0.12] text-slate-50"
                   : "border-transparent bg-slate-900/25 text-muted hover:border-line/80 hover:text-slate-100",
