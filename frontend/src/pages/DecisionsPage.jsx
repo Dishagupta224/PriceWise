@@ -72,6 +72,40 @@ function confidenceText(confidence) {
   return "Low";
 }
 
+function cleanSentence(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function summarizeHumanInterventionReason(reasoning) {
+  const text = cleanSentence(reasoning);
+  if (!text) {
+    return "AI execution was blocked by safety checks and requires operator review.";
+  }
+
+  const patterns = [
+    /Update rejected:\s*([^.]*)/i,
+    /(Agent requested a price change but did not return a valid proposed_price\.)/i,
+    /(OpenAI API key is not configured\.[^.]*\.)/i,
+    /(Runtime session inactive\.[^.]*\.)/i,
+    /(Agent execution failed:[^.]*\.)/i,
+    /(Proposed (?:drop|increase) of [^.]*safety cap\.)/i,
+    /(Cannot justify a strategic price (?:drop|increase) without competitor market position data\.)/i,
+    /(Competitive (?:overpricing )?gap of [^.]*threshold[^.]*\.)/i,
+    /(Triggering competitor[^.]*\.)/i,
+    /Agent reasoning:\s*([^.]*(?:\.[^.]+)?)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      return cleanSentence(match[1]).replace(/^Agent reasoning:\s*/i, "");
+    }
+  }
+
+  const firstSentence = splitReasoning(text)[0];
+  return firstSentence || "AI execution was blocked by safety checks and requires operator review.";
+}
+
 function initials(name) {
   return String(name || "P")
     .split(" ")
@@ -335,6 +369,7 @@ function DecisionsPage() {
             const isExpanded = Boolean(expanded[decision.id]);
             const confidence = Number(decision.confidence_score || 0);
             const steps = splitReasoning(detail?.reasoning || decision.reasoning_preview);
+            const rejectionReason = summarizeHumanInterventionReason(detail?.reasoning || decision.reasoning_preview);
             const beforePrice = Number(detail?.before_price ?? 0);
             const afterPrice = Number(detail?.after_price ?? 0);
             const delta = beforePrice > 0 && afterPrice > 0 ? afterPrice - beforePrice : 0;
@@ -360,9 +395,14 @@ function DecisionsPage() {
                             <h3 className="mt-1 text-lg font-semibold text-slate-50">{decision.product_name}</h3>
                             <p className="text-xs text-muted">Product #{decision.product_id}</p>
                             {decision.execution_status === "REJECTED" ? (
-                              <p className="mt-2 inline-flex rounded-full border border-warning/40 bg-warning/10 px-2 py-1 text-xs font-medium text-warning">
-                                Human intervention needed
-                              </p>
+                              <>
+                                <p className="mt-2 inline-flex rounded-full border border-warning/40 bg-warning/10 px-2 py-1 text-xs font-medium text-warning">
+                                  Human intervention needed
+                                </p>
+                                <p className="mt-2 max-w-3xl text-xs leading-6 text-warning/90">
+                                  Why AI did not execute: {rejectionReason}
+                                </p>
+                              </>
                             ) : null}
                           </div>
 
@@ -502,6 +542,12 @@ function DecisionsPage() {
                               <StatusBadge value={detail.execution_status} />
                               <span className="text-sm text-muted">{compactDateTime(detail.created_at)}</span>
                             </div>
+                            {detail.execution_status === "REJECTED" ? (
+                              <div className="mt-4 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm leading-6 text-warning">
+                                <p className="font-medium">Why AI did not execute</p>
+                                <p className="mt-1">{rejectionReason}</p>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>
