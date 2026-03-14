@@ -132,7 +132,7 @@ class PricingDecisionAgent:
 
         try:
             decision, tools_used = await self._run_agent_loop(event)
-            result = await self._execute_decision(product_id, source_event_id, event, decision, tools_used)
+            result = await self._execute_decision(product_id, source_event_id, request_id, event, decision, tools_used)
         except Exception as exc:
             logger.exception("Pricing agent failed for product_id=%s", product_id)
             result = self._fallback_hold(
@@ -253,6 +253,7 @@ class PricingDecisionAgent:
         self,
         product_id: int,
         source_event_id: str | None,
+        request_id: str,
         source_event: dict[str, Any],
         decision: dict[str, Any],
         runtime_tools_used: list[str],
@@ -368,6 +369,7 @@ class PricingDecisionAgent:
                     update_result=update_result,
                     alert_payload=self._build_human_intervention_alert(
                         product_id=product_id,
+                        product_name=product_name,
                         reason=final_reasoning,
                         source_event_id=source_event_id,
                     ),
@@ -404,12 +406,22 @@ class PricingDecisionAgent:
             )
 
         if decision_type is AgentDecisionType.REORDER_ALERT:
+            stock_quantity = int(product_details["stock"])
+            alert_reason = str(
+                decision.get("alert_message")
+                or decision.get("reasoning")
+                or f"{product_name} needs restocking attention."
+            )
             alert_payload = {
                 "event_id": str(uuid4()),
                 "request_id": request_id,
                 "product_id": product_id,
+                "product_name": product_name,
                 "alert_type": "REORDER_ALERT",
-                "reason": str(decision.get("alert_message") or reasoning),
+                "current_stock": stock_quantity,
+                "threshold": settings.low_stock_threshold,
+                "reason": alert_reason,
+                "recommended_action": "Review inventory and place a restock order if needed.",
                 "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             }
             return AgentExecutionResult(
@@ -484,6 +496,7 @@ class PricingDecisionAgent:
             execution_status=ExecutionStatus.REJECTED,
             alert_payload=self._build_human_intervention_alert(
                 product_id=product_id,
+                product_name=product_name,
                 reason=reason,
                 source_event_id=source_event_id,
             ),
@@ -509,6 +522,7 @@ class PricingDecisionAgent:
         product_id: int | None,
         reason: str,
         source_event_id: str | None,
+        product_name: str | None = None,
     ) -> dict[str, Any] | None:
         """Build an alerts-topic payload when AI decision execution is rejected and needs review."""
         if product_id is None:
@@ -516,8 +530,10 @@ class PricingDecisionAgent:
         return {
             "event_id": str(uuid4()),
             "product_id": product_id,
+            "product_name": product_name,
             "alert_type": "HUMAN_INTERVENTION_REQUIRED",
             "reason": reason,
+            "recommended_action": "Review this decision and choose the next pricing action manually.",
             "source_event_id": source_event_id,
             "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }

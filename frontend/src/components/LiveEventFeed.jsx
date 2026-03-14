@@ -6,6 +6,7 @@ import {
   CircleDot,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { alertSummary, alertTypeLabel } from "../utils/alertNarration";
 import { formatCurrency, formatRelativeTime, sentenceCase } from "../utils/formatters";
 
 function resolveProductName(message) {
@@ -34,7 +35,7 @@ function eventSummary(message) {
   }
 
   if (message.type === "ALERT") {
-    return message.data?.reason || message.data?.alert_type || "Alert emitted";
+    return alertSummary(message);
   }
 
   return sentenceCase(message.type);
@@ -48,7 +49,7 @@ function eventMeta(message) {
     return "Agent decision";
   }
   if (message?.type === "ALERT") {
-    return "Active alert";
+    return alertTypeLabel(message.data?.alert_type || "Alert");
   }
   return sentenceCase(message?.type || "Event");
 }

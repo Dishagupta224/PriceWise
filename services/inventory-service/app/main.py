@@ -121,9 +121,15 @@ class InventoryService:
                     "event_id": str(uuid4()),
                     "request_id": request_id,
                     "product_id": product_id,
+                    "product_name": product.name,
                     "alert_type": "LOW_STOCK",
                     "current_stock": new_stock,
                     "threshold": settings.low_stock_threshold,
+                    "reason": (
+                        f"{product.name} is low in stock. Only {new_stock} units are left, "
+                        f"which is below the alert level of {settings.low_stock_threshold}."
+                    ),
+                    "recommended_action": "Restock this product soon.",
                     "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
                 }
                 await self._producer.send("alerts", alert_event, key=str(product_id))

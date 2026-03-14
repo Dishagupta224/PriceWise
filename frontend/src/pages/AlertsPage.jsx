@@ -4,6 +4,7 @@ import EmptyState from "../components/EmptyState";
 import LoadingPanel from "../components/LoadingPanel";
 import { useLiveFeed } from "../context/LiveFeedContext";
 import { getProducts, updateProduct } from "../services/api";
+import { alertActionText, alertSummary, alertTypeLabel } from "../utils/alertNarration";
 import { formatNumber, formatRelativeTime } from "../utils/formatters";
 
 function AlertsPage() {
@@ -93,12 +94,26 @@ function AlertsPage() {
   }
 
   const recentAlertEvents = useMemo(
-    () =>
-      messages
+    () => {
+      const productMap = new Map(
+        [...lowStockProducts, ...outOfStockProducts].map((product) => [product.id, product.name]),
+      );
+      return messages
         .filter((message) => message.type === "ALERT")
         .slice(0, 15)
-        .map((message, idx) => ({ ...message, _id: `${message.timestamp || "alert"}-${idx}` })),
-    [messages],
+        .map((message, idx) => {
+          const fallbackName = productMap.get(message.data?.product_id);
+          return {
+            ...message,
+            _id: `${message.timestamp || "alert"}-${idx}`,
+            displayName: message.data?.product_name || fallbackName || `Product #${message.data?.product_id || "--"}`,
+            summary: alertSummary(message, fallbackName),
+            actionText: alertActionText(message),
+            label: alertTypeLabel(message.data?.alert_type || "ALERT"),
+          };
+        });
+    },
+    [messages, lowStockProducts, outOfStockProducts],
   );
 
   if (isLoading) {
@@ -244,9 +259,10 @@ function AlertsPage() {
           {recentAlertEvents.map((event) => (
             <div key={event._id} className="rounded-xl border border-line/70 bg-slate-950/25 px-4 py-3">
               <p className="text-sm font-medium text-slate-100">
-                Product #{event.data?.product_id || "--"} | {event.data?.alert_type || "ALERT"}
+                {event.displayName} | {event.label}
               </p>
-              <p className="mt-1 text-sm text-muted">{event.data?.reason || "No extra reason provided."}</p>
+              <p className="mt-1 text-sm text-muted">{event.summary}</p>
+              {event.actionText ? <p className="mt-1 text-sm text-slate-100">Suggested action: {event.actionText}</p> : null}
               <p className="mt-2 text-xs text-muted">{formatRelativeTime(event.timestamp)}</p>
             </div>
           ))}

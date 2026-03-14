@@ -34,6 +34,15 @@ function decisionTone(value) {
   }[value] || "border-line/80 bg-slate-900/40 text-slate-200";
 }
 
+function decisionTypeLabel(value) {
+  return {
+    PRICE_DROP: "Price Drop",
+    PRICE_HOLD: "Price Hold",
+    PRICE_INCREASE: "Price Increase",
+    REORDER_ALERT: "Restock Recommended",
+  }[value] || String(value || "").replace(/_/g, " ");
+}
+
 function getDateFrom(range) {
   const now = new Date();
   if (range === "today") {
@@ -222,7 +231,7 @@ function DecisionsPage() {
                       >
                         <Check size={10} strokeWidth={3} />
                       </span>
-                      <span>{type.replace(/_/g, " ")}</span>
+                      <span>{decisionTypeLabel(type)}</span>
                     </button>
                   );
                 })}
@@ -358,7 +367,7 @@ function DecisionsPage() {
                             {decision.execution_status === "REJECTED" ? (
                               <>
                                 <p className="mt-2 inline-flex rounded-full border border-warning/40 bg-warning/10 px-2 py-1 text-xs font-medium text-warning">
-                                  Human intervention needed
+                                  Needs manual review
                                 </p>
                                 <p className="mt-2 max-w-3xl text-xs leading-6 text-warning/90">
                                   Why AI did not execute: {rejectionReason}
@@ -369,7 +378,7 @@ function DecisionsPage() {
 
                           <div className="flex items-center gap-3">
                             <span className={`status-pill ${decisionTone(decision.decision_type)}`}>
-                              {decision.decision_type.replace(/_/g, " ")}
+                              {decisionTypeLabel(decision.decision_type)}
                             </span>
                             <span className="rounded-xl border border-line/70 bg-slate-950/[0.30] p-2 text-slate-100">
                               {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
