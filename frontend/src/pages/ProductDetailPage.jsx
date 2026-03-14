@@ -7,6 +7,7 @@ import ProductPriceChart from "../components/ProductPriceChart";
 import StatusBadge from "../components/StatusBadge";
 import useWebSocket from "../hooks/useWebSocket";
 import { getDecision, getDecisions, getProduct, getProductPriceHistory } from "../services/api";
+import { simplifyReasoningText } from "../utils/decisionNarration";
 import { compactDateTime, formatCurrency, formatPercent, formatNumber, stockTone } from "../utils/formatters";
 
 function buildProductWebSocketUrl(productId) {
@@ -208,13 +209,14 @@ function ProductDetailPage() {
                 {decisions.map((decision) => {
                   const isExpanded = Boolean(expanded[decision.id]);
                   const detail = decisionDetails[decision.id];
+                  const displayReasoning = simplifyReasoningText(detail?.reasoning || decision.reasoning_preview);
 
                   return (
                     <Fragment key={decision.id}>
                       <tr>
                         <td>{compactDateTime(decision.created_at)}</td>
                         <td><StatusBadge value={decision.decision_type} /></td>
-                        <td className="max-w-xl truncate text-muted">{decision.reasoning_preview}</td>
+                        <td className="max-w-xl truncate text-muted">{displayReasoning}</td>
                         <td>{formatPercent((decision.confidence_score || 0) * 100)}</td>
                         <td>
                           <button
@@ -230,7 +232,7 @@ function ProductDetailPage() {
                         <tr className="bg-slate-950/20">
                           <td colSpan={5}>
                             <div className="space-y-4 py-2">
-                              <p className="text-sm leading-7 text-slate-100">{detail?.reasoning || decision.reasoning_preview}</p>
+                              <p className="text-sm leading-7 text-slate-100">{displayReasoning}</p>
                               {detail ? (
                                 <div className="grid gap-3 md:grid-cols-3">
                                   <div className="panel-soft p-4">

@@ -796,8 +796,9 @@ class PricingDecisionAgent:
 
             if float(gap_percent) > -settings.strategic_drop_min_gap_percent:
                 return (
-                    f"Competitive overpricing gap of {gap_percent}% is below the "
-                    f"{settings.strategic_drop_min_gap_percent}% threshold for a strategic price drop."
+                    f"We are only {abs(float(gap_percent)):.2f}% above the cheapest competitor, "
+                    f"which is not enough to justify a strategic price drop. "
+                    f"The minimum overpricing gap required is {settings.strategic_drop_min_gap_percent}%."
                 )
             return None
 
@@ -818,8 +819,9 @@ class PricingDecisionAgent:
 
         if float(gap_percent) < settings.strategic_increase_min_gap_percent:
             return (
-                f"Competitive gap of {gap_percent}% is below the "
-                f"{settings.strategic_increase_min_gap_percent}% threshold for safe upward repricing."
+                f"We are only {float(gap_percent):.2f}% below the cheapest competitor, "
+                f"which is not enough to justify a safe price increase. "
+                f"The minimum gap required is {settings.strategic_increase_min_gap_percent}%."
             )
 
         safe_ceiling = Decimal(str(cheapest_competitor_price)) * (

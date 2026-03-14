@@ -5,6 +5,7 @@ import EmptyState from "../components/EmptyState";
 import LoadingPanel from "../components/LoadingPanel";
 import StatusBadge from "../components/StatusBadge";
 import { getDecision, getDecisions, getProducts } from "../services/api";
+import { simplifyReasoningText, splitReasoning, summarizeHumanInterventionReason } from "../utils/decisionNarration";
 import { compactDateTime, formatCurrency, formatPercent, formatRelativeTime } from "../utils/formatters";
 
 const DECISION_TYPES = ["PRICE_DROP", "PRICE_HOLD", "PRICE_INCREASE", "REORDER_ALERT"];
@@ -48,13 +49,6 @@ function getDateFrom(range) {
   return undefined;
 }
 
-function splitReasoning(reasoning) {
-  return String(reasoning || "")
-    .split(/(?<=[.?!])\s+/)
-    .map((step) => step.trim())
-    .filter(Boolean);
-}
-
 function toolLabel(tool) {
   return String(tool || "")
     .replace(/^get_/, "")
@@ -70,40 +64,6 @@ function confidenceText(confidence) {
     return "Medium";
   }
   return "Low";
-}
-
-function cleanSentence(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function summarizeHumanInterventionReason(reasoning) {
-  const text = cleanSentence(reasoning);
-  if (!text) {
-    return "AI execution was blocked by safety checks and requires operator review.";
-  }
-
-  const patterns = [
-    /Update rejected:\s*([^.]*)/i,
-    /(Agent requested a price change but did not return a valid proposed_price\.)/i,
-    /(OpenAI API key is not configured\.[^.]*\.)/i,
-    /(Runtime session inactive\.[^.]*\.)/i,
-    /(Agent execution failed:[^.]*\.)/i,
-    /(Proposed (?:drop|increase) of [^.]*safety cap\.)/i,
-    /(Cannot justify a strategic price (?:drop|increase) without competitor market position data\.)/i,
-    /(Competitive (?:overpricing )?gap of [^.]*threshold[^.]*\.)/i,
-    /(Triggering competitor[^.]*\.)/i,
-    /Agent reasoning:\s*([^.]*(?:\.[^.]+)?)/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match?.[1]) {
-      return cleanSentence(match[1]).replace(/^Agent reasoning:\s*/i, "");
-    }
-  }
-
-  const firstSentence = splitReasoning(text)[0];
-  return firstSentence || "AI execution was blocked by safety checks and requires operator review.";
 }
 
 function initials(name) {
@@ -368,6 +328,7 @@ function DecisionsPage() {
             const detail = details[decision.id];
             const isExpanded = Boolean(expanded[decision.id]);
             const confidence = Number(decision.confidence_score || 0);
+            const displayReasoning = simplifyReasoningText(detail?.reasoning || decision.reasoning_preview);
             const steps = splitReasoning(detail?.reasoning || decision.reasoning_preview);
             const rejectionReason = summarizeHumanInterventionReason(detail?.reasoning || decision.reasoning_preview);
             const beforePrice = Number(detail?.before_price ?? 0);
@@ -416,7 +377,7 @@ function DecisionsPage() {
                           </div>
                         </div>
 
-                        <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-100">{decision.reasoning_preview}</p>
+                        <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-100">{displayReasoning}</p>
 
                         <div className="mt-4 flex flex-wrap gap-2">
                           {(detail?.tools_used || []).length > 0 ? (
