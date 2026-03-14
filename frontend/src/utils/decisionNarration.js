@@ -1,3 +1,5 @@
+import { formatCurrency } from "./formatters";
+
 function cleanText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
@@ -8,6 +10,14 @@ function formatPercentValue(value) {
     return null;
   }
   return `${number.toFixed(2).replace(/\.00$/, "")}%`;
+}
+
+function formatMoneyValue(value) {
+  const number = Number(value);
+  if (Number.isNaN(number)) {
+    return String(value || "");
+  }
+  return formatCurrency(number);
 }
 
 function simplifyGuardrailMessage(text) {
@@ -36,7 +46,7 @@ function simplifyGuardrailMessage(text) {
   match = text.match(/Proposed price ([\d.]+) exceeds the safe competitor ceiling ([\d.]+),?/i);
   if (match) {
     const [, proposedPrice, ceiling] = match;
-    return `The suggested new price would put us too high above the safe market range. The proposal was ${proposedPrice}, but the safe ceiling was ${ceiling}.`;
+    return `The suggested new price would put us too high above the safe market range. The proposal was ${formatMoneyValue(proposedPrice)}, but the safe ceiling was ${formatMoneyValue(ceiling)}.`;
   }
 
   if (/Cannot justify a strategic price increase without competitor market position data\.?/i.test(text)) {
@@ -71,28 +81,28 @@ export function simplifyReasoningSentence(sentence) {
   match = text.match(/Competitor ([^.]*) moved from ([\d.]+) to ([\d.]+) \(([-\d.]+)% change\)\.?/i);
   if (match) {
     const [, competitor, fromPrice, toPrice, change] = match;
-    return `${competitor} changed its price from ${fromPrice} to ${toPrice} (${change}).`;
+    return `${competitor} changed its price from ${formatMoneyValue(fromPrice)} to ${formatMoneyValue(toPrice)} (${formatPercentValue(change)}).`;
   }
 
   match = text.match(/Our current price remains ([\d.]+)\.?/i);
   if (match) {
-    return `We kept our price at ${match[1]}.`;
+    return `We kept our price at ${formatMoneyValue(match[1])}.`;
   }
 
   match = text.match(/Our current price was ([\d.]+)\.?/i);
   if (match) {
-    return `Our price before this decision was ${match[1]}.`;
+    return `Our price before this decision was ${formatMoneyValue(match[1])}.`;
   }
 
   match = text.match(/Our new price is ([\d.]+)\.?/i);
   if (match) {
-    return `The updated price is ${match[1]}.`;
+    return `The updated price is ${formatMoneyValue(match[1])}.`;
   }
 
   match = text.match(/Our current price is ([\d.]+)\. Proposed new price is ([\d.]+)\.?/i);
   if (match) {
     const [, currentPrice, proposedPrice] = match;
-    return `The AI considered moving the price from ${currentPrice} to ${proposedPrice}.`;
+    return `The AI considered moving the price from ${formatMoneyValue(currentPrice)} to ${formatMoneyValue(proposedPrice)}.`;
   }
 
   match = text.match(/Agent reasoning:\s*(.*)/i);
@@ -132,7 +142,7 @@ export function simplifyReasoningText(reasoning) {
 
 export function splitReasoning(reasoning) {
   return cleanText(reasoning)
-    .split(/(?<=[.?!])\s+/)
+    .split(/(?<=[.?!])\s+(?=[A-Z])/)
     .map((step) => simplifyReasoningSentence(step))
     .filter(Boolean);
 }
