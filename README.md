@@ -3,18 +3,18 @@
 
 ---
 
-## 1. Demo GIF / Screenshots
+## 1. Screenshots
 
-> Add your demo assets here
+> Add your screenshot assets here
 
-- `docs/demo.gif` (full workflow)
 - `docs/dashboard.png`
 - `docs/products.png`
 - `docs/decisions.png`
 
 ```md
-![Demo GIF](docs/demo.gif)
 ![Dashboard](docs/dashboard.png)
+![Products](docs/products.png)
+![Decisions](docs/decisions.png)
 ```
 
 ---
