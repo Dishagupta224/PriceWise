@@ -10,11 +10,15 @@
 - `docs/dashboard.png`
 - `docs/products.png`
 - `docs/decisions.png`
+- `docs/alerts.png`
+- `docs/margins.png`
 
 ```md
 ![Dashboard](docs/dashboard.png)
 ![Products](docs/products.png)
 ![Decisions](docs/decisions.png)
+![Alerts](docs/alerts.png)
+![Margins](docs/margins.png)
 ```
 
 ---
