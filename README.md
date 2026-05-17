@@ -79,7 +79,7 @@ flowchart LR
     CS -->|read/write snapshots| DB
     DS -->|read/write snapshots| DB
 
-    API[Dashboard API<br/>FastAPI + WebSocket bridge] <-->|queries| DB
+    API["Dashboard API\nFastAPI + WebSocket bridge"] <-->|queries| DB
     API <-->|consume + stream events| K
 
     FE[React Dashboard] <-->|REST + WebSocket| API
