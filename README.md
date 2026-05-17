@@ -25,7 +25,41 @@ PriceWise is an event-driven pricing simulation platform for e-commerce teams. C
 
 ---
 
-## Architecture
+## HLD (High Level Design)
+
+### 1) Business Objective
+
+Provide an operations-grade, real-time pricing intelligence surface for e-commerce teams by combining:
+
+- Event-driven market simulation (competitor movement, demand/orders)
+- Guarded automated pricing recommendations/execution
+- A dashboard that surfaces product health, decisions, alerts, and margin impact
+
+### 2) Scope
+
+In scope:
+
+- Product catalog CRUD + analytics APIs
+- Kafka-based event stream (pricing signals, orders, alerts, decisions)
+- Pricing agent with deterministic guardrails and optional OpenAI reasoning
+- Inventory updates driven by order events
+- WebSocket live feeds for operational UI
+
+Out of scope (by design for this demo/simulator):
+
+- Payment, fulfillment, and real ERP integrations
+- User auth/SSO and RBAC (runtime activation is the primary gating mechanism here)
+- Multi-tenant isolation
+
+### 3) System Context (C4-L1)
+
+Primary actors:
+
+- E-commerce operator (uses the dashboard)
+- Market simulators (produce competitor and demand events)
+- Pricing automation (processes competitor signals into decisions/alerts)
+
+### 4) Logical Architecture (C4-L2)
 
 ```mermaid
 flowchart LR
@@ -57,6 +91,216 @@ flowchart LR
 - `inventory-updates`
 - `price-decisions`
 - `alerts`
+
+### 5) Deployment View
+
+Local / demo deployment is Docker Compose:
+
+- `postgres` (shared persistence)
+- `kafka` + `zookeeper` (event bus)
+- `kafka-ui` (ops visibility)
+- `dashboard-api` (FastAPI + WebSockets + Kafka bridge)
+- `pricing-agent` (Kafka consumer + rule engine + optional OpenAI tool-calling)
+- `inventory-service` (Kafka consumer that applies order events to stock)
+- `competitor-simulator` (publisher for competitor movement)
+- `demand-simulator` (publisher for orders)
+- `frontend` runs separately via Vite dev server
+
+### 6) Key Non-Functional Requirements (NFRs)
+
+- Safety: pricing actions are constrained by margin floors, significance thresholds, cooldowns, and per-action caps.
+- Resilience: Kafka clients retry on startup; consumers tolerate transient failures; services emit heartbeats for healthchecks.
+- Observability: JSON logs with propagated `request_id`; operational events also visible via Kafka UI and dashboard live feed.
+- Performance: pricing agent uses a bounded in-memory queue + configurable concurrency for controlled throughput.
+
+### 7) Security & Data Handling (Demo Posture)
+
+- No end-user identity or authorization model is implemented beyond the runtime-session gate.
+- Secrets are read via environment variables (e.g., `OPENAI_API_KEY`), and OpenAI calls are disabled when not configured.
+- All inbound/outbound payloads are JSON; invalid Kafka payloads are safely dropped.
+
+---
+
+## LLD (Low Level Design)
+
+### 1) Service Responsibilities
+
+`services/dashboard-api` (FastAPI):
+
+- Product CRUD and dashboard enrichment (competitor snapshots, margin %, 24h deltas)
+- Analytics endpoints (summary + top movers)
+- Runtime-session endpoints used to activate the simulation/agent pipeline for a limited window
+- WebSocket endpoints and a background Kafka consumer that forwards events to WebSocket rooms
+
+`services/pricing-agent` (async worker service):
+
+- Consumes `price-changes`
+- Applies a fast-path rule engine (ignore noise, prevent feedback loops, enforce cooldown, create direct alerts on stock=0)
+- When eligible and runtime is active, runs OpenAI tool-calling to produce a structured decision
+- Normalizes and clamps proposed prices into safe operating bounds
+- Publishes `price-decisions` (and optionally `alerts`)
+
+`services/inventory-service` (async worker service):
+
+- Consumes `orders`
+- Decrements stock and persists order events (idempotent by unique `event_id`)
+- Publishes `inventory-updates` and `alerts` (LOW_STOCK)
+
+`services/competitor-simulator`:
+
+- Periodically persists competitor snapshots
+- Publishes `price-changes` (keyed by `product_id:competitor_name`)
+- Idles when no active runtime session exists
+
+`services/demand-simulator`:
+
+- Publishes `orders`
+- Idles when no active runtime session exists
+
+`frontend` (React/Vite):
+
+- REST client against Dashboard API for catalog/analytics
+- WebSocket client for live feed and product rooms
+
+### 2) Data Model (PostgreSQL)
+
+Core tables used by the operational surface (representative fields):
+
+- `products`: `name`, `category`, `our_price`, `cost_price`, `stock_quantity`, `min_margin_percent`, `is_active`
+- `competitor_prices`: `product_id`, `competitor_name`, `price`, `captured_at`
+- `price_history`: `product_id`, `old_price`, `new_price`, `change_reason`, `decided_by`, `created_at`
+- `agent_decisions`: `product_id`, `decision_type`, `reasoning`, `confidence_score`, `tools_used`, `execution_status`, `created_at`
+- `order_events`: `event_id` (unique), `product_id`, `quantity`, `customer_region`, `created_at`
+- `runtime_access_sessions`: `user_id`, `activated_at`, `expires_at`
+
+### 3) Kafka Topic Contracts
+
+All messages are JSON values. Producers serialize with `json.dumps(..., default=str)`, so `Decimal` fields (prices, percent deltas) are typically encoded as JSON strings. `request_id` is propagated and used for log correlation.
+
+`price-changes` (producer: competitor-simulator; consumers: pricing-agent, dashboard-api live bridge)
+
+```json
+{
+  "event_id": "uuid",
+  "request_id": "uuid",
+  "product_id": 123,
+  "competitor_name": "FlipMart",
+  "old_price": "999.99",
+  "new_price": "974.99",
+  "change_percent": "-2.5",
+  "timestamp": "2026-05-17T12:34:56Z"
+}
+```
+
+`orders` (producer: demand-simulator; consumer: inventory-service)
+
+```json
+{
+  "event_id": "uuid",
+  "request_id": "uuid",
+  "product_id": 123,
+  "quantity": 2,
+  "customer_region": "Mumbai",
+  "timestamp": "2026-05-17T12:34:56Z"
+}
+```
+
+`inventory-updates` (producer: inventory-service; consumer: dashboard-api via DB reads + live bridge for UI)
+
+```json
+{
+  "event_id": "uuid",
+  "request_id": "uuid",
+  "product_id": 123,
+  "previous_stock": 20,
+  "new_stock": 18,
+  "change_reason": "ORDER",
+  "timestamp": "2026-05-17T12:34:56Z"
+}
+```
+
+`price-decisions` (producer: pricing-agent; consumers: dashboard-api live bridge + analytics via DB)
+
+```json
+{
+  "event_id": "uuid",
+  "request_id": "uuid",
+  "product_id": 123,
+  "decision_type": "PRICE_DROP | PRICE_HOLD | PRICE_INCREASE | REORDER_ALERT",
+  "reasoning": "string",
+  "confidence_score": 0.0,
+  "tools_used": ["get_product_details"],
+  "execution_status": "EXECUTED | SKIPPED | FAILED",
+  "created_at": "2026-05-17T12:34:56Z",
+  "source_event_id": "uuid",
+  "proposed_price": 949.99
+}
+```
+
+`alerts` (producer: inventory-service and pricing-agent; consumers: dashboard-api live bridge + UI)
+
+```json
+{
+  "event_id": "uuid",
+  "request_id": "uuid",
+  "product_id": 123,
+  "alert_type": "LOW_STOCK | REORDER_ALERT",
+  "current_stock": 10,
+  "threshold": 15,
+  "reason": "string",
+  "product_name": "optional string",
+  "recommended_action": "optional string",
+  "timestamp": "2026-05-17T12:34:56Z"
+}
+```
+
+### 4) Key Runtime Flows (Sequence)
+
+Competitor signal to pricing decision:
+
+```mermaid
+sequenceDiagram
+    participant CS as Competitor Simulator
+    participant K as Kafka
+    participant PA as Pricing Agent
+    participant DB as PostgreSQL
+    participant API as Dashboard API
+    participant FE as React Dashboard
+
+    CS->>K: publish price-changes
+    PA->>K: consume price-changes
+    PA->>DB: load product + recent decisions (cooldown)
+    PA->>PA: rule-engine fast path
+    PA->>DB: tool calls (product/market/demand) + optional price update
+    PA->>K: publish price-decisions (+ alerts)
+    API->>K: consume (bridge) and broadcast via WS
+    FE-->>API: WS receive live-feed/product room events
+```
+
+Demand order to inventory update:
+
+```mermaid
+sequenceDiagram
+    participant DS as Demand Simulator
+    participant K as Kafka
+    participant IS as Inventory Service
+    participant DB as PostgreSQL
+
+    DS->>K: publish orders
+    IS->>K: consume orders
+    IS->>DB: decrement stock + insert order_events (idempotent by event_id)
+    IS->>K: publish inventory-updates
+    IS->>K: publish alerts (LOW_STOCK) when below threshold
+```
+
+### 5) Guardrails and Safety Mechanisms
+
+- Margin floor enforced on product create/update (API) and on agent execution paths.
+- Noise filter: ignore competitor changes below `MIN_SIGNIFICANT_PRICE_CHANGE_PERCENT`.
+- Cooldown: ignore repricing for `PRICING_COOLDOWN_MINUTES` after a recent decision.
+- Feedback-loop prevention: ignore competitor events that echo our own updates (source/competitor name/new_price checks).
+- Bounded execution: per-action caps for drop/increase; clamping/normalization of oversized model proposals.
+- Runtime gate: simulators and agent idle unless at least one active `runtime_access_sessions` row exists.
 
 ---
 
